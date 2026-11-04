@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+# datos personales del usuario (portafolio, claves, reportes): no se suben
+trader/config.json
+trader/state/
