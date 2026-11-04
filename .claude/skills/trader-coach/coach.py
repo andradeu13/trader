@@ -466,6 +466,31 @@ def _r(x, nd=2):
 
 # ----------------------------------------------------------------- render
 
+BOGOTA = datetime.timezone(datetime.timedelta(hours=-5))  # Colombia no usa horario de verano
+
+
+def xtb_symbol(sym):
+    """Acciones reales de EEUU en XTB llevan sufijo .US (AAPL.US). ETFs/CFD pueden variar: verifica en xStation."""
+    return sym if "." in sym else sym + ".US"
+
+
+def market_hours_bogota(now=None):
+    """Horario NYSE (9:30-16:00 Nueva York) expresado en hora de Bogota, con el horario de verano de EEUU."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trader-alerts", "alerts.py")
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    try:
+        spec = importlib.util.spec_from_file_location("trader_alerts", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        ny = mod.eastern_offset(now.replace(tzinfo=None))
+        off = int(ny.total_seconds() // 3600) if hasattr(ny, "total_seconds") else int(ny)
+    except Exception:
+        off = -5
+    shift = off - (-5)  # horas que Nueva York va por delante de Bogota
+    return "NYSE abre %02d:30 y cierra %02d:00 hora Bogota" % (9 - shift, 16 - shift)
+
+
 def money(x):
     return "n/d" if x is None else "$%s" % format(x, ",.2f")
 
@@ -473,7 +498,7 @@ def money(x):
 def render_analysis(r):
     ind, bp, sp = r["indicators"], r["buy_plan"], r["sell_plan"]
     L = []
-    L.append("## %s  %s  (%+.2f%% hoy, datos al %s)" % (r["symbol"], money(r["price"]), r["change_pct"], r["as_of"]))
+    L.append("## %s  (XTB: %s)  %s  (%+.2f%% hoy, datos al %s)" % (r["symbol"], xtb_symbol(r["symbol"]), money(r["price"]), r["change_pct"], r["as_of"]))
     L.append("**Veredicto del coach: %s**  (puntaje %+d)" % (r["verdict"], r["score"]))
     if r.get("live_candle"):
         L.append("_La vela de hoy puede estar formandose (datos con retraso). Un patron solo es firme cuando la vela cierra; usa --closed-only para ignorarla._")
@@ -536,6 +561,8 @@ def render_analysis(r):
     L.append("- Zona de toma de ganancias: %s a %s%s" % (money(sp["sell_zone"][0]), money(sp["sell_zone"][1]), flag))
     L.append("- Stop de seguimiento (maximo de 10 velas - 2 ATR): %s. %s" % (money(sp["trailing_stop"]), sp["break_even_stop_hint"]))
     L.append("- Vende todo o parte si: una vela bajista fuerte (envolvente/estrella) aparece EN la resistencia, o cierra bajo tu stop.")
+    L.append("")
+    L.append("**En XTB:** el precio de XTB (con su spread) manda, no el de Yahoo. Antes de abrir en xStation revisa: spread, comision, que sea accion real o CFD (el CFD cobra swap nocturno), y pon tu stop y take-profit en la orden. Confirma que el stop sigue valiendo la pena con el spread incluido.")
     L.append("")
     L.append("_Educacion y aritmetica sobre datos con retraso; no es consejo financiero. El coach no coloca ordenes._")
     return "\n".join(L)
@@ -659,6 +686,12 @@ def holdings_tickers(root="trader"):
             s = row.get("symbol") or row.get("ticker") if isinstance(row, dict) else None
             if s:
                 syms.append(s.upper())
+    wl = os.path.join(root, "watchlist.json")
+    if os.path.isfile(wl):
+        try:
+            syms += [str(x).upper() for x in json.load(open(wl, encoding="utf-8")).get("tickers", [])]
+        except (OSError, ValueError, AttributeError):
+            pass
     seen, out = set(), []
     for s in syms:
         if s not in seen:
@@ -726,7 +759,9 @@ def cmd_brief(a):
     rs = [analyze_series(s, closed_only=a.closed_only) for s in series]
     rs.sort(key=lambda r: -abs(r["score"]))
     today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    L = ["# Reporte del coach - %s" % today, ""]
+    now_b = datetime.datetime.now(BOGOTA).strftime("%Y-%m-%d %H:%M")
+    L = ["# Reporte del coach - %s" % today, "",
+         "_Generado %s hora Bogota (UTC-5). %s._" % (now_b, market_hours_bogota()), ""]
     buys = [r for r in rs if r["score"] >= 3 or r["buy_plan"]["price_is_in_buy_zone"]]
     sells = [r for r in rs if r["score"] <= -3 or r["sell_plan"]["price_is_in_sell_zone"]]
     L.append("**En zona de compra:** " + (", ".join(r["symbol"] for r in buys) or "ninguno"))

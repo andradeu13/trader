@@ -146,6 +146,19 @@ class Analysis(unittest.TestCase):
         self.assertEqual(coach.main(["quiz", "--seed", "1", "--show"]), 0)
 
 
+class Xtb(unittest.TestCase):
+    def test_symbol_suffix(self):
+        self.assertEqual(coach.xtb_symbol("AAPL"), "AAPL.US")
+        self.assertEqual(coach.xtb_symbol("BRK.B"), "BRK.B")
+
+    def test_hours_in_bogota(self):
+        import datetime as d
+        winter = d.datetime(2026, 11, 4, 15, tzinfo=d.timezone.utc)
+        summer = d.datetime(2027, 7, 1, 15, tzinfo=d.timezone.utc)
+        self.assertIn("abre 09:30 y cierra 16:00", coach.market_hours_bogota(winter))
+        self.assertIn("abre 08:30 y cierra 15:00", coach.market_hours_bogota(summer))
+
+
 class Safety(unittest.TestCase):
     def test_coach_never_touches_orders(self):
         src = open(os.path.join(ROOT, ".claude/skills/trader-coach/coach.py"), encoding="utf-8").read()

@@ -74,6 +74,14 @@ SESGO ALCISTA, ESPERAR, SESGO BAJISTA, ZONA DE VENTA / REDUCIR.
 6. Guarda el diario: si el usuario toma una decision, ofrece anotarla en
    `trader/coach/diario.md` (fecha, ticker, razon, plan, resultado, leccion).
 
+## Usuario: XTB, Bogota (UTC-5)
+
+- El usuario opera en **XTB** (xStation). No hay conector de broker para XTB: las ordenes las pone el a mano. `trader-broker` (Alpaca/IBKR) no aplica; el coach entrega el plan (entrada, stop, take-profit, acciones) y el usuario lo escribe en xStation.
+- Simbolos de acciones de EEUU en XTB: `AAPL.US`. El analisis lo muestra. Verifica ETFs y CFD en xStation.
+- Precio de referencia: Yahoo tiene retraso y no incluye el spread de XTB. Recuerda revisar spread, comision y swap (si es CFD) antes de abrir; un stop muy corto puede perder por spread.
+- Horas siempre en Bogota. NYSE 9:30-16:00 Nueva York = 09:30-16:00 Bogota en horario de invierno de EEUU (hasta el 7-mar-2027) y 08:30-15:00 en verano.
+- Si el usuario tiene cuenta en otra divisa o apalancamiento (CFD), el riesgo se mide igual: perdida maxima en dinero = acciones x (entrada - stop). No sugerir apalancamiento.
+
 ## Lectura diaria (agenda)
 
 `brief --holdings --write --closed-only` escribe `trader/coach/AAAA-MM-DD.md` y

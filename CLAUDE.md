@@ -10,3 +10,5 @@ Repo de trading asistido con Claude. Contiene:
 Reglas: ninguna orden sale sin la ruta budget -> risk -> broker y un "yes" explicito del usuario para esa orden. Paper trading por defecto. No es consejo financiero. SEC pide identificarse: pon `sec_user_agent` en `trader/config.json` o la variable `SEC_USER_AGENT`.
 
 Uso rapido: `/trader-coach analiza AAPL`, `python3 .claude/skills/trader-coach/coach.py scan --holdings`.
+
+Usuario: opera en XTB (xStation, ordenes manuales; simbolos `AAPL.US`), zona horaria Bogota UTC-5. Mostrar horas en Bogota. El coach da el plan; el usuario ejecuta en XTB.
