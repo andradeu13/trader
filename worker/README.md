@@ -12,27 +12,33 @@ Dashboard + pushes de compra/venta. Usa el mismo motor que `coach.py` (el test c
 
 El Worker **no coloca órdenes** y no tiene acceso a XTB: las ejecutas tú a mano en xStation. Datos de Yahoo con retraso. No es consejo financiero.
 
-## Despliegue (5 minutos)
+## Despliegue
+
+### Opción A: conectado a GitHub (recomendada, se despliega solo en cada push a `main`)
+
+1. Fusiona el PR a `main` (Cloudflare construye desde `main`).
+2. En Cloudflare: **Workers & Pages → Create → Import a repository** (Workers Builds) y autoriza la app de GitHub sobre `andradeu13/trader`.
+3. Configura el build:
+   - **Root directory:** `worker`
+   - **Build command:** `npm ci`
+   - **Deploy command:** `npx wrangler deploy`
+   - El nombre del Worker debe ser `trader-coach` (el de `wrangler.toml`).
+4. El primer despliegue crea solo el KV `STATE` y programa los cron (están en `wrangler.toml`).
+5. Pon los secretos en **Workers → trader-coach → Settings → Variables and Secrets** (tipo *Secret*): `DASH_PASSWORD` y `NTFY_TOPIC` (y opcionalmente `NTFY_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`). Los secretos **no** van en el repo y un despliegue nuevo no los borra.
+6. Opcional: define `DASH_URL` (la URL `https://trader-coach.<tu-subdominio>.workers.dev`) como variable para que el push abra el dashboard.
+
+### Opción B: desde tu computador
 
 ```bash
 cd worker
 npm install
 npx wrangler login
-npx wrangler kv namespace create STATE        # copia el id a wrangler.toml
-```
-
-Secretos (nunca en el repo):
-
-```bash
 npx wrangler secret put DASH_PASSWORD         # contraseña del dashboard (usuario: cualquiera)
 npx wrangler secret put NTFY_TOPIC            # un nombre largo e impredecible, ej. coach-9f3k2x7q-bogota
+npx wrangler deploy                           # crea el KV la primera vez
 ```
 
-```bash
-npx wrangler deploy
-```
-
-Opcional: en `wrangler.toml` descomenta `DASH_URL` con la URL de tu Worker para que al tocar el push abra el dashboard, y `ACCOUNT`/`RISK_PCT` (también se editan desde Ajustes).
+Opcional: en `wrangler.toml` descomenta `DASH_URL`, `ACCOUNT` y `RISK_PCT` (también se editan desde Ajustes del dashboard).
 
 ### Recibir los pushes en el celular
 1. Instala la app **ntfy** (iOS o Android) y suscríbete al mismo nombre que pusiste en `NTFY_TOPIC`.

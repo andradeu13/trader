@@ -2,10 +2,10 @@ name = "trader-coach"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
 
-# 1) Crea el KV:  npx wrangler kv namespace create STATE   -> pega el id aqui
+# KV para el estado (lista de acciones, posiciones, ultimo analisis, alertas ya enviadas).
+# Sin `id`: Wrangler 4 lo crea solo en el primer despliegue (tambien desde GitHub) y lo reutiliza.
 [[kv_namespaces]]
 binding = "STATE"
-id = "00000000000000000000000000000000"  # <- REEMPLAZA con el id real que imprime el comando anterior
 
 [vars]
 # Valores iniciales; luego los editas desde el dashboard (Ajustes) y quedan en KV.
