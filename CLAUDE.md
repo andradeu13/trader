@@ -12,3 +12,4 @@ Reglas: ninguna orden sale sin la ruta budget -> risk -> broker y un "yes" expli
 Uso rapido: `/trader-coach analiza AAPL`, `python3 .claude/skills/trader-coach/coach.py scan --holdings`.
 
 Usuario: opera en XTB (xStation, ordenes manuales; simbolos `AAPL.US`), zona horaria Bogota UTC-5. Mostrar horas en Bogota. El coach da el plan; el usuario ejecuta en XTB.
+- `worker/`: Cloudflare Worker (dashboard + pushes ntfy/Telegram), puerto JS de coach.py. `cd worker && npm test`. Si cambias reglas en coach.py, cambia coach.js (el test de paridad lo verifica).
