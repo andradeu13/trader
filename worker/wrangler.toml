@@ -1,0 +1,23 @@
+name = "trader-coach"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# KV para el estado (lista de acciones, posiciones, ultimo analisis, alertas ya enviadas).
+# Sin `id`: Wrangler 4 lo crea solo en el primer despliegue (tambien desde GitHub) y lo reutiliza.
+[[kv_namespaces]]
+binding = "STATE"
+
+[vars]
+# Valores iniciales; luego los editas desde el dashboard (Ajustes) y quedan en KV.
+WATCHLIST = "AAPL,KO,BAC,AXP,GOOGL"
+# ACCOUNT = "5000"      # tamano de tu cuenta XTB en USD (opcional)
+# RISK_PCT = "1"
+# DASH_URL = "https://trader-coach.TU-SUBDOMINIO.workers.dev"   # al tocar el push abre el dashboard
+
+# Horas en UTC (Bogota = UTC-5 todo el ano).
+[triggers]
+crons = [
+  "40 12 * * 1-5",        # 07:40 Bogota: pre-apertura (resumen del dia, velas cerradas)
+  "*/15 13-21 * * 1-5",   # cada 15 min; el codigo solo actua con NYSE abierto (cubre horario de verano e invierno)
+  "20 22 * * 1-5",        # 17:20 Bogota: post-cierre
+]

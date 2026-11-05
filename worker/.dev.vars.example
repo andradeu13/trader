@@ -1,0 +1,5 @@
+# Copia a .dev.vars para `npm run dev`. En produccion usa `npx wrangler secret put NOMBRE`.
+DASH_PASSWORD=cambia-esto
+NTFY_TOPIC=trader-coach-un-nombre-largo-e-impredecible
+# TELEGRAM_BOT_TOKEN=
+# TELEGRAM_CHAT_ID=

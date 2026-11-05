@@ -21,6 +21,10 @@ Cada analisis incluye: anatomia de la ultima vela y patrones (15), SMA 20/50/200
 
 El reporte `brief` se puede programar (antes de la apertura, 9:00 hora de Nueva York, dias habiles) para que te llegue la lista de tickers en zona de compra/venta y una leccion del dia. Escribe `trader/coach/AAAA-MM-DD.md`.
 
+## Dashboard y pushes (Cloudflare Workers)
+
+Carpeta `worker/`: dashboard que se actualiza solo y pushes de compra/venta/stop. Guía de despliegue en [`worker/README.md`](worker/README.md).
+
 ## Reglas
 
 Nada coloca ordenes salvo `trader-broker`, y solo tras `trader-risk` y tu "yes" explicito. Paper trading por defecto. Datos gratis con retraso. **No es consejo financiero.**
