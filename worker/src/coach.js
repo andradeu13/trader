@@ -225,6 +225,8 @@ export function analyze(symbol, candles, { account = null, riskPct = 1, closedOn
     patterns: pats, supports: sup.slice(0, 3).map((x) => ({ level: r2(x.level), touches: x.touches })),
     resistances: res.slice(0, 3).map((x) => ({ level: r2(x.level), touches: x.touches })),
     live_candle: live && !closedOnly, score, verdict, kind, reasons, buy_plan: plan, sell_plan: sell,
-    candles: cs.slice(-60).map((c) => ({ t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v })),
+    candles: cs.slice(-120).map((c) => ({ t: c.t, o: c.o, h: c.h, l: c.l, c: c.c, v: c.v })),
+    series: { sma20: s20.slice(-120).map((x) => r2(x)), sma50: s50.slice(-120).map((x) => r2(x)),
+      bbl: bl.slice(-120).map((x) => r2(x)), bbu: bu.slice(-120).map((x) => r2(x)) },
   };
 }

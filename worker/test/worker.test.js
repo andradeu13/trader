@@ -9,6 +9,7 @@ import { parseChart } from '../src/yahoo.js';
 import { evaluate } from '../src/rules.js';
 import { marketStatus } from '../src/market.js';
 import worker, { run } from '../src/index.js';
+import { DASHBOARD_HTML } from '../src/dashboard.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (s) => JSON.parse(readFileSync(path.join(here, 'fixtures', `yahoo-chart-${s}.json`), 'utf8'));
@@ -80,6 +81,26 @@ test('stop y objetivo de una posicion', () => {
   assert.equal(evaluate(base({ price: 90 }), {}, { ...pos, shares: 0 }, { date: 'd' }).alerts.length, 0);
 });
 
+test('el analisis trae 120 velas y series alineadas para el grafico', () => {
+  const a = analyze('KO', parseChart(fx('KO'), 'KO'), { now: NOW });
+  assert.equal(a.candles.length, 120);
+  for (const k of ['sma20', 'sma50', 'bbl', 'bbu']) assert.equal(a.series[k].length, 120, k);
+  assert.ok(a.series.sma20.at(-1) !== null && a.series.sma50.at(-1) !== null);
+});
+
+test('horario de la sesion en hora Bogota y proxima apertura', () => {
+  const w = marketStatus(new Date('2026-11-04T15:00:00Z'));
+  assert.deepEqual(w.session, { open: '09:30', close: '16:00' });
+  assert.equal(w.closesInMin, 360); // 10:00 ET -> 16:00 ET
+  const v = marketStatus(new Date('2027-07-01T15:00:00Z'));
+  assert.deepEqual(v.session, { open: '08:30', close: '15:00' });
+  const sat = marketStatus(new Date('2026-11-07T15:00:00Z'));
+  assert.deepEqual(sat.nextOpen, { date: '2026-11-09', days: 2 });
+  const pre = marketStatus(new Date('2026-11-04T12:00:00Z')); // 7:00 ET
+  assert.equal(pre.opensInMin, 150);
+  assert.equal(marketStatus(new Date('2026-11-25T23:00:00Z')).nextOpen.date, '2026-11-27'); // salta Thanksgiving
+});
+
 test('reloj NYSE', () => {
   assert.equal(marketStatus(new Date('2026-11-04T15:00:00Z')).open, true);   // 10:00 ET
   assert.equal(marketStatus(new Date('2026-11-04T22:00:00Z')).open, false);  // 17:00 ET
@@ -107,6 +128,13 @@ test('API: exige contrasena, anti-CSRF y valida entradas', async () => {
   const ok = await worker.fetch(new Request('https://x/', { headers: { Authorization: auth('secreto') } }), env);
   assert.equal(ok.status, 200);
   assert.match(ok.headers.get('Content-Security-Policy'), /default-src 'none'/);
+  const html = await ok.text();
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(html, /manifest\.webmanifest/);
+  const mf = await worker.fetch(new Request('https://x/manifest.webmanifest', { headers: { Authorization: auth('secreto') } }), env);
+  assert.equal((await mf.json()).display, 'standalone');
+  assert.equal((await worker.fetch(new Request('https://x/icon.svg', { headers: { Authorization: auth('secreto') } }), env)).headers.get('Content-Type'), 'image/svg+xml');
+  assert.equal((await worker.fetch(new Request('https://x/manifest.webmanifest'), env)).status, 401);
   const post = (p, b, h = {}) => worker.fetch(new Request('https://x' + p, { method: 'POST', body: JSON.stringify(b), headers: { Authorization: auth('secreto'), ...h } }), env);
   assert.equal((await post('/api/config', { watchlist: ['KO'] })).status, 403, 'sin cabecera anti-CSRF');
   assert.equal((await post('/api/config', { watchlist: ['KO'] }, { 'X-Requested-With': 'dashboard', Origin: 'https://evil' })).status, 403);
@@ -158,4 +186,11 @@ test('un ticker que falla no tumba a los demas', async () => {
     assert.ok(r.errors.ZZZ);
     assert.ok((await env.STATE.get('snapshot', 'json')).items.AAPL);
   } finally { globalThis.fetch = real; }
+});
+
+test('el script del dashboard es JavaScript valido y no usa innerHTML con datos', () => {
+  const js = DASHBOARD_HTML.split('<script>')[1].split('</script>')[0];
+  assert.doesNotThrow(() => new Function(js));
+  const uses = js.match(/innerHTML/g) || [];
+  assert.equal(uses.length, 2, 'solo las lecciones y los textos estaticos de indicadores (contenido propio, no datos)');
 });

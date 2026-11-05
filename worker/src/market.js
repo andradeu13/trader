@@ -12,14 +12,28 @@ const part = (d, tz) => {
   return { date: `${o.year}-${o.month}-${o.day}`, minutes: (+o.hour % 24) * 60 + +o.minute, weekday: o.weekday };
 };
 
+const hhmm = (m) => String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0') + ':' + String(((m % 60) + 60) % 60).padStart(2, '0');
+
 export function marketStatus(now = new Date()) {
-  const ny = part(now, 'America/New_York');
+  const ny = part(now, 'America/New_York'), bo = part(now, 'America/Bogota');
   const weekend = ny.weekday === 'Sat' || ny.weekday === 'Sun';
   const holiday = HOLIDAYS.has(ny.date);
   const close = EARLY_CLOSE.has(ny.date) ? 13 * 60 : 16 * 60;
+  const openMin = 9 * 60 + 30;
   const tradingDay = !weekend && !holiday;
-  return { date: ny.date, tradingDay, open: tradingDay && ny.minutes >= 9 * 60 + 30 && ny.minutes < close,
-    holiday: holiday || null, knownYear: /^202[67]/.test(ny.date) };
+  const open = tradingDay && ny.minutes >= openMin && ny.minutes < close;
+  const shift = ((bo.minutes - ny.minutes + 1440 + 720) % 1440) - 720; // minutos Bogota - Nueva York (0 o -60)
+  const out = { date: ny.date, tradingDay, open, holiday: holiday || null, knownYear: /^202[67]/.test(ny.date),
+    session: { open: hhmm(openMin + shift), close: hhmm(close + shift) } };
+  if (open) out.closesInMin = close - ny.minutes;
+  else if (tradingDay && ny.minutes < openMin) { out.opensInMin = openMin - ny.minutes; out.nextOpen = { date: ny.date, days: 0 }; }
+  else {
+    for (let k = 1; k <= 10; k++) {
+      const d = part(new Date(now.getTime() + k * 86400000), 'America/New_York');
+      if (d.weekday !== 'Sat' && d.weekday !== 'Sun' && !HOLIDAYS.has(d.date)) { out.nextOpen = { date: d.date, days: k }; break; }
+    }
+  }
+  return out;
 }
 
 export const bogota = (now = new Date(), opts = { dateStyle: 'short', timeStyle: 'short' }) =>
