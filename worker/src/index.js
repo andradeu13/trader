@@ -3,7 +3,7 @@ import { fetchCandles } from './yahoo.js';
 import { evaluate } from './rules.js';
 import { sendPush } from './push.js';
 import { marketStatus, bogota } from './market.js';
-import { DASHBOARD_HTML } from './dashboard.js';
+import { DASHBOARD_HTML, MANIFEST, ICON_SVG } from './dashboard.js';
 
 const MAX_TICKERS = 25;
 const SYM = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/;
@@ -138,9 +138,11 @@ export default {
       if (url.pathname.startsWith('/api/')) return await handleApi(req, env, url);
       if (req.method === 'GET' && url.pathname === '/') {
         return new Response(DASHBOARD_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' } });
       }
+      if (req.method === 'GET' && url.pathname === '/manifest.webmanifest') return new Response(JSON.stringify(MANIFEST), { headers: { 'Content-Type': 'application/manifest+json' } });
+      if (req.method === 'GET' && url.pathname === '/icon.svg') return new Response(ICON_SVG, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' } });
       return new Response('No encontrado', { status: 404 });
     } catch (e) { return json({ error: String(e.message || e) }, 500); }
   },
