@@ -10,6 +10,9 @@ import { evaluate } from '../src/rules.js';
 import { marketStatus } from '../src/market.js';
 import worker, { run } from '../src/index.js';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
+import { shortTerm, RULE } from '../src/shortterm.js';
+import { sendPush, cleanTopic } from '../src/push.js';
+import { xtbSymbol, yahooSymbol, isCfd } from '../src/yahoo.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fx = (s) => JSON.parse(readFileSync(path.join(here, 'fixtures', `yahoo-chart-${s}.json`), 'utf8'));
@@ -154,7 +157,7 @@ test('run(): analiza, guarda el snapshot, manda push y no repite', async () => {
   globalThis.fetch = mockFetch(calls);
   try {
     const env = { STATE: kv(), WATCHLIST: 'AAPL,KO', NTFY_TOPIC: 'prueba', DASH_URL: 'https://x' };
-    await env.STATE.put('cfg', JSON.stringify({ watchlist: ['AAPL', 'KO'], positions: { KO: { entry: 200, stop: 150, target: 300, shares: 5 } }, account: 5000, riskPct: 1 }));
+    await env.STATE.put('cfg', JSON.stringify({ v: 2, watchlist: ['AAPL', 'KO'], positions: { KO: { entry: 200, stop: 150, target: 300, shares: 5 } }, account: 5000, riskPct: 1 }));
     const day = new Date('2026-11-04T22:20:00Z'); // 17:20 Bogota, dia habil
     const r = await run(env, 'postclose', day);
     assert.equal(r.tickers, 2);
@@ -181,7 +184,7 @@ test('un ticker que falla no tumba a los demas', async () => {
   globalThis.fetch = async (u) => (String(u).includes('/ZZZ?') ? new Response('{}', { status: 404 }) : new Response(JSON.stringify(fx('AAPL')), { status: 200 }));
   try {
     const env = { STATE: kv() };
-    await env.STATE.put('cfg', JSON.stringify({ watchlist: ['AAPL', 'ZZZ'], positions: {}, account: null, riskPct: 1 }));
+    await env.STATE.put('cfg', JSON.stringify({ v: 2, watchlist: ['AAPL', 'ZZZ'], positions: {}, account: null, riskPct: 1 }));
     const r = await run(env, 'manual', new Date('2026-11-04T22:20:00Z'));
     assert.ok(r.errors.ZZZ);
     assert.ok((await env.STATE.get('snapshot', 'json')).items.AAPL);
@@ -193,4 +196,101 @@ test('el script del dashboard es JavaScript valido y no usa innerHTML con datos'
   assert.doesNotThrow(() => new Function(js));
   const uses = js.match(/innerHTML/g) || [];
   assert.equal(uses.length, 2, 'solo las lecciones y los textos estaticos de indicadores (contenido propio, no datos)');
+});
+
+const fx2 = (n) => parseChart(JSON.parse(readFileSync(path.join(here, 'fixtures', `yahoo-chart-2y-${n}.json`), 'utf8')), n);
+
+test('US100 y otros indices de XTB: alias de Yahoo, simbolo XTB y marca CFD', () => {
+  assert.equal(yahooSymbol('US100'), '^NDX');
+  assert.equal(xtbSymbol('US100'), 'US100');
+  assert.equal(xtbSymbol('AAPL'), 'AAPL.US');
+  assert.equal(isCfd('us100'), true);
+  assert.equal(isCfd('AAPL'), false);
+  assert.equal(yahooSymbol('BRK.B'), 'BRK-B');
+});
+
+test('corto plazo: la regla se simula sin trampas (sin superposicion, R acotado, curva consistente)', () => {
+  for (const n of ['NDX', 'NVDA', 'TSLA']) {
+    const st = shortTerm(fx2(n));
+    assert.equal(st.ok, true);
+    const b = st.bt;
+    assert.equal(b.curve.length, b.n, n);
+    assert.ok(b.n >= 1, n + ' tiene operaciones');
+    // objetivo = +2R menos costo; un stop con hueco puede pasar de -1R pero nunca ser mayor al objetivo
+    for (const t of b.last) assert.ok(t.r <= RULE.targetAtr / RULE.stopAtr - RULE.costR + 1e-9 && t.r > -6, n + ' R en rango: ' + t.r);
+    assert.ok(Math.abs(b.curve.at(-1) - b.totalR) < 0.011, n + ' la curva termina en el total');
+    assert.equal(st.now.conds.length, 4);
+    assert.ok(st.now.stop < st.now.entry && st.now.entry < st.now.target);
+    assert.ok(['hist', 'marginal', 'none', 'small'].includes(b.edge));
+  }
+  assert.equal(shortTerm(fx2('NDX').slice(0, 100)).ok, false, 'sin velas suficientes lo dice');
+});
+
+test('corto plazo: una serie sin retrocesos no produce operaciones', () => {
+  const up = Array.from({ length: 300 }, (_, i) => ({ t: 1700000000 + i * 86400, o: 100 + i, h: 101 + i, l: 99.5 + i, c: 100.8 + i, v: 1 }));
+  const st = shortTerm(up);
+  assert.equal(st.bt.n, 0);
+  assert.equal(st.bt.edge, 'small');
+  assert.equal(st.now.active, false);
+});
+
+test('alerta de corto plazo: solo con ventaja historica, una vez por activacion', () => {
+  const a = base({ cfd: true, xtb: 'US100', symbol: 'US100', short: { ok: true,
+    now: { active: true, entry: 100, stop: 95, target: 110 }, bt: { edge: 'hist', n: 20, winRate: 0.5, avgR: 0.4 } } });
+  const r1 = evaluate(a, {}, null, { date: 'd' });
+  assert.equal(r1.alerts.filter((x) => /corto plazo/.test(x.title)).length, 0, 'espera 2 lecturas');
+  const r2 = evaluate(a, r1.next, null, { date: 'd' });
+  const al = r2.alerts.find((x) => /corto plazo/.test(x.title));
+  assert.ok(al && /CFD/.test(al.body) && /US100/.test(al.title));
+  const r3 = evaluate(a, r2.next, null, { date: 'd2' });
+  assert.equal(r3.alerts.filter((x) => /corto plazo/.test(x.title)).length, 0, 'no repite mientras siga activo');
+  const weak = base({ short: { ok: true, now: { active: true, entry: 100, stop: 95, target: 110 }, bt: { edge: 'none', n: 20, winRate: 0.3, avgR: -0.2 } } });
+  assert.equal(evaluate(weak, {}, null, { date: 'd', confirm: true }).alerts.length, 0, 'sin ventaja historica no avisa');
+});
+
+test('push: normaliza el canal y explica los fallos', async () => {
+  assert.equal(cleanTopic(' https://ntfy.sh/mi-canal/ '), 'mi-canal');
+  const real = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response('{"error":"limit reached: daily message quota reached"}', { status: 429 });
+    let r = await sendPush({ NTFY_TOPIC: 'abc' }, { title: 't', body: 'b' });
+    assert.deepEqual(r.sent, []);
+    assert.match(r.errors[0], /cuota diaria.*Telegram/s);
+    globalThis.fetch = async () => new Response('{"ok":false,"description":"Bad Request: chat not found"}', { status: 400 });
+    r = await sendPush({ TELEGRAM_BOT_TOKEN: 'x', TELEGRAM_CHAT_ID: '1' }, { title: 't', body: 'b' });
+    assert.match(r.errors[0], /Start/);
+    r = await sendPush({ NTFY_TOPIC: 'con espacios!' }, { title: 't', body: 'b' });
+    assert.match(r.errors[0], /caracteres no permitidos/);
+    r = await sendPush({}, { title: 't', body: 'b' });
+    assert.match(r.error, /ningún canal/);
+    globalThis.fetch = async () => new Response('ok', { status: 200 });
+    r = await sendPush({ NTFY_TOPIC: 'abc', TELEGRAM_BOT_TOKEN: 'x', TELEGRAM_CHAT_ID: '1' }, { title: 't', body: 'b' });
+    assert.deepEqual(r.sent.sort(), ['ntfy', 'telegram']);
+  } finally { globalThis.fetch = real; }
+});
+
+test('listas guardadas antes de v2 reciben US100 una sola vez', async () => {
+  const real = globalThis.fetch; globalThis.fetch = mockFetch([]);
+  try {
+    const env = { STATE: kv(), DASH_PASSWORD: 'p' };
+    await env.STATE.put('cfg', JSON.stringify({ watchlist: ['KO'], positions: {} }));
+    const get = () => worker.fetch(new Request('https://x/api/state', { headers: { Authorization: auth('p') } }), env).then((r) => r.json());
+    const st = await get();
+    assert.ok(st.cfg.watchlist.includes('US100') && st.cfg.watchlist.includes('KO'));
+    // si el usuario la quita y guarda, no vuelve
+    await worker.fetch(new Request('https://x/api/config', { method: 'POST', body: JSON.stringify({ watchlist: ['KO'] }), headers: { Authorization: auth('p'), 'X-Requested-With': 'dashboard' } }), env);
+    assert.deepEqual((await get()).cfg.watchlist, ['KO']);
+  } finally { globalThis.fetch = real; }
+});
+
+test('registro de envios: la prueba manual queda guardada con su error', async () => {
+  const real = globalThis.fetch; globalThis.fetch = async () => new Response('x', { status: 429 });
+  try {
+    const env = { STATE: kv(), DASH_PASSWORD: 'p', NTFY_TOPIC: 'abc' };
+    const r = await worker.fetch(new Request('https://x/api/test-push', { method: 'POST', body: '{}', headers: { Authorization: auth('p'), 'X-Requested-With': 'dashboard' } }), env).then((x) => x.json());
+    assert.match(r.errors[0], /cuota/);
+    const st = await worker.fetch(new Request('https://x/api/state', { headers: { Authorization: auth('p') } }), env).then((x) => x.json());
+    assert.equal(st.pushlog[0].title, 'Prueba manual');
+    assert.match(st.pushlog[0].errors[0], /cuota/);
+  } finally { globalThis.fetch = real; }
 });

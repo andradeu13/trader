@@ -8,7 +8,7 @@ export function evaluate(a, prev = {}, position = null, { date, confirm = false 
   const alerts = [], sent = { ...(prev.sent || {}) };
   const next = { sent };
   for (const k of Object.keys(sent)) if (!k.endsWith(date)) delete sent[k]; // solo se recuerda el dia de hoy
-  const sym = `${a.symbol} (XTB: ${xtbSymbol(a.symbol)})`;
+  const sym = `${a.symbol} (XTB: ${a.xtb || xtbSymbol(a.symbol)})`;
   const push = (key, title, body, priority, tags) => {
     const id = `${key}:${date}`;
     if (sent[id]) return;
@@ -34,6 +34,15 @@ export function evaluate(a, prev = {}, position = null, { date, confirm = false 
   if (stable && a.buy_plan.price_is_in_buy_zone && !prev.inBuy && a.score >= 1 && a.kind !== 'buy' && (bp.rr_target1 ?? 0) >= 1.5) {
     push(`${a.symbol}:buyzone`, `🟡 Entró a su zona de compra: ${sym}`,
       `Precio ${money(a.price)} dentro de ${money(bp.buy_zone[0])}–${money(bp.buy_zone[1])}. Puntaje ${a.score >= 0 ? '+' : ''}${a.score}, R:R ${bp.rr_target1}. Espera una vela de confirmación.`, 3, ['yellow_circle']);
+  }
+  // corto plazo: avisa UNA vez cuando el setup se activa en un activo donde la regla ha funcionado en el historial
+  const st = a.short && a.short.ok ? a.short : null, live = !!(st && st.now.active && st.bt.edge === 'hist');
+  next.sn = live ? (prev.sn || 0) + 1 : 0;
+  next.sdone = live ? !!prev.sdone : false;
+  if (live && !prev.sdone && (confirm || next.sn >= 2)) {
+    next.sdone = true;
+    push(`${a.symbol}:short`, `⚡ Setup de corto plazo: ${sym}`,
+      `Retroceso en tendencia alcista que ya gira. Entrada ref. ${money(st.now.entry)} · stop ${money(st.now.stop)} · objetivo ${money(st.now.target)} (2 a 1, máx. 10 sesiones).\nHistorial de esta regla aquí: ${st.bt.n} operaciones, ${Math.round(st.bt.winRate * 100)}% aciertos, ${st.bt.avgR >= 0 ? '+' : ''}${st.bt.avgR}R por operación. Sin garantías.${a.cfd ? '\nEs un CFD: revisa apalancamiento, spread y swap.' : ''}`, 4, ['zap']);
   }
   if (position && position.shares > 0) {
     if (position.stop && a.price <= position.stop) push(`${a.symbol}:stop`, `🛑 STOP tocado: ${sym}`,

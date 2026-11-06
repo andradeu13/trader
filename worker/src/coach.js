@@ -152,6 +152,11 @@ export const levels = (cs, atrNow) => {
 const r2 = (x, nd = 2) => (x === null || x === undefined || Number.isNaN(x) ? null : Math.round(x * 10 ** nd) / 10 ** nd);
 const last = (a) => a[a.length - 1];
 
+export function dropLive(cs, now = Date.now()) {
+  const today = new Date(now).toISOString().slice(0, 10);
+  return cs.length && new Date(cs[cs.length - 1].t * 1000).toISOString().slice(0, 10) === today && new Date(now).getUTCHours() < 21 ? cs.slice(0, -1) : cs;
+}
+
 export function analyze(symbol, candles, { account = null, riskPct = 1, closedOnly = false, now = Date.now() } = {}) {
   let cs = candles, live = false;
   const today = new Date(now).toISOString().slice(0, 10);

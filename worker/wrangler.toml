@@ -9,7 +9,7 @@ binding = "STATE"
 
 [vars]
 # Valores iniciales; luego los editas desde el dashboard (Ajustes) y quedan en KV.
-WATCHLIST = "AAPL,KO,BAC,AXP,GOOGL"
+WATCHLIST = "US100,AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,KO,BAC,AXP"
 # ACCOUNT = "5000"      # tamano de tu cuenta XTB en USD (opcional)
 # RISK_PCT = "1"
 # DASH_URL = "https://trader-coach.TU-SUBDOMINIO.workers.dev"   # al tocar el push abre el dashboard

@@ -1,5 +1,9 @@
 // Velas de Yahoo (gratis, con retraso, no oficial). Una peticion por ticker.
-export const xtbSymbol = (s) => (s.includes('.') ? s : s + '.US');
+// Indices de XTB (CFD) -> simbolo de Yahoo con velas diarias. El resto son acciones de EEUU (AAPL.US en XTB).
+export const INDEX_ALIASES = { US100: '^NDX', US500: '^GSPC', US30: '^DJI', DE40: '^GDAXI', GOLD: 'GC=F' };
+export const isCfd = (s) => Object.prototype.hasOwnProperty.call(INDEX_ALIASES, String(s).toUpperCase());
+export const yahooSymbol = (s) => INDEX_ALIASES[String(s).toUpperCase()] || String(s).toUpperCase().replace('.', '-');
+export const xtbSymbol = (s) => (isCfd(s) || s.includes('.') ? s : s + '.US');
 
 export function parseChart(doc, sym) {
   const r = doc?.chart?.result?.[0];
@@ -15,7 +19,7 @@ export function parseChart(doc, sym) {
 }
 
 export async function fetchCandles(sym, range = '1y', interval = '1d') {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym.toUpperCase().replace('.', '-'))}?range=${range}&interval=${interval}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol(sym))}?range=${range}&interval=${interval}`;
   const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; trader-coach/1.0)' } });
   if (!res.ok) throw new Error(`${sym}: Yahoo respondió ${res.status}`);
   return parseChart(await res.json(), sym);

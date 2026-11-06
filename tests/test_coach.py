@@ -150,6 +150,9 @@ class Xtb(unittest.TestCase):
     def test_symbol_suffix(self):
         self.assertEqual(coach.xtb_symbol("AAPL"), "AAPL.US")
         self.assertEqual(coach.xtb_symbol("BRK.B"), "BRK.B")
+        self.assertEqual(coach.xtb_symbol("US100"), "US100")
+        self.assertEqual(coach.yahoo_symbol("us100"), "^NDX")
+        self.assertIn("%5ENDX", coach.yahoo_url("US100", "1y", "1d"))
 
     def test_hours_in_bogota(self):
         import datetime as d

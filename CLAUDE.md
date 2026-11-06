@@ -12,4 +12,5 @@ Reglas: ninguna orden sale sin la ruta budget -> risk -> broker y un "yes" expli
 Uso rapido: `/trader-coach analiza AAPL`, `python3 .claude/skills/trader-coach/coach.py scan --holdings`.
 
 Usuario: opera en XTB (xStation, ordenes manuales; simbolos `AAPL.US`), zona horaria Bogota UTC-5. Mostrar horas en Bogota. El coach da el plan; el usuario ejecuta en XTB.
+- `worker/src/shortterm.js` (solo JS): regla de corto plazo + backtest; el coach de Python no la tiene. US100/US500/US30/DE40/GOLD son CFD de XTB con alias de Yahoo (`INDEX_ALIASES`, igual en `coach.py` y `worker/src/yahoo.js`).
 - `worker/`: Cloudflare Worker (dashboard + pushes ntfy/Telegram), puerto JS de coach.py. `cd worker && npm test`. Si cambias reglas en coach.py, cambia coach.js (el test de paridad lo verifica).

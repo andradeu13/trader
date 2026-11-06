@@ -1,5 +1,6 @@
-import { analyze } from './coach.js';
-import { fetchCandles } from './yahoo.js';
+import { analyze, dropLive } from './coach.js';
+import { fetchCandles, isCfd, xtbSymbol } from './yahoo.js';
+import { shortTerm, RULE } from './shortterm.js';
 import { evaluate } from './rules.js';
 import { sendPush } from './push.js';
 import { marketStatus, bogota } from './market.js';
@@ -28,11 +29,26 @@ async function authorized(req, env) {
 }
 
 // ---- estado ------------------------------------------------------------
+const EXTRA = ['US100', 'NVDA', 'MSFT', 'AMZN', 'META', 'TSLA', 'AMD']; // se agregan una sola vez a listas guardadas antes de v2
+
 async function getCfg(env) {
   const saved = (await env.STATE.get('cfg', 'json')) || {};
-  const wl = saved.watchlist || (env.WATCHLIST || 'AAPL,KO,BAC,AXP,GOOGL').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
-  return { watchlist: wl, positions: saved.positions || {},
+  if (saved.watchlist && !saved.v) { // migracion unica: incluye US100 y acciones liquidas para el escaner de corto plazo
+    saved.watchlist = [...new Set([...saved.watchlist, ...EXTRA])].slice(0, MAX_TICKERS);
+    saved.v = 2;
+    await env.STATE.put('cfg', JSON.stringify(saved));
+  }
+  const wl = saved.watchlist || (env.WATCHLIST || 'US100,AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,AMD,KO,BAC,AXP').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+  return { v: 2, watchlist: wl, positions: saved.positions || {},
     account: saved.account ?? (env.ACCOUNT ? +env.ACCOUNT : null), riskPct: saved.riskPct ?? (env.RISK_PCT ? +env.RISK_PCT : 1) };
+}
+
+async function logPush(env, entries) {
+  if (!entries.length) return;
+  const log = (await env.STATE.get('pushlog', 'json')) || [];
+  const now = new Date().toISOString();
+  entries.forEach((e) => log.unshift({ t: now, title: e.title || '', sent: e.sent || [], errors: e.errors || (e.error ? [e.error] : []) }));
+  await env.STATE.put('pushlog', JSON.stringify(log.slice(0, 12)));
 }
 
 async function mapLimit(items, n, fn) {
@@ -55,7 +71,11 @@ export async function run(env, mode, now = new Date()) {
   const errors = {}, items = {};
   await mapLimit(tickers, 4, async (s) => {
     try {
-      items[s] = analyze(s, await fetchCandles(s), { account: cfg.account, riskPct: cfg.riskPct, closedOnly, now: now.getTime() });
+      let full = await fetchCandles(s, '2y');
+      if (closedOnly) full = dropLive(full, now.getTime());
+      const a = analyze(s, full.slice(-252), { account: cfg.account, riskPct: cfg.riskPct, closedOnly: false, now: now.getTime() });
+      a.xtb = xtbSymbol(s); a.cfd = isCfd(s); a.short = shortTerm(full);
+      items[s] = a;
     } catch (e) { errors[s] = String(e.message || e); if (snap.items[s]) items[s] = { ...snap.items[s], stale: true }; }
   });
   const toSend = [];
@@ -68,7 +88,8 @@ export async function run(env, mode, now = new Date()) {
   for (const s of Object.keys(alertState)) if (!tickers.includes(s)) delete alertState[s];
   const pushes = [];
   if (mode !== 'manual') {
-    for (const a of toSend) pushes.push({ id: a.id, ...(await sendPush(env, { ...a, click: env.DASH_URL })) });
+    const logs = [];
+    for (const a of toSend) { const r = await sendPush(env, { ...a, click: env.DASH_URL }); pushes.push({ id: a.id, ...r }); logs.push({ title: a.title, ...r }); }
     if (closedOnly) {
       const ok = Object.values(items).filter((x) => !x.stale);
       const buys = ok.filter((x) => x.kind === 'buy' || x.buy_plan.price_is_in_buy_zone).map((x) => x.symbol);
@@ -76,9 +97,11 @@ export async function run(env, mode, now = new Date()) {
       pushes.push({ id: 'summary', ...(await sendPush(env, {
         title: mode === 'preopen' ? '☀️ Coach: pre-apertura' : '🌙 Coach: post-cierre',
         body: `En zona de compra: ${buys.join(', ') || 'ninguno'}\nEn zona de venta: ${sells.join(', ') || 'ninguno'}\n${bogota(now)} hora Bogotá. No es consejo financiero.`, priority: 2, tags: ['bar_chart'], click: env.DASH_URL })) });
+      logs.push({ title: pushes[pushes.length - 1].id === 'summary' ? (mode === 'preopen' ? 'Resumen pre-apertura' : 'Resumen post-cierre') : '', ...pushes[pushes.length - 1] });
     }
+    await logPush(env, logs);
   }
-  await env.STATE.put('snapshot', JSON.stringify({ updated: now.toISOString(), mode, items, errors }));
+  await env.STATE.put('snapshot', JSON.stringify({ updated: now.toISOString(), mode, items, errors, rule: RULE }));
   await env.STATE.put('alerts', JSON.stringify(alertState));
   return { updated: now.toISOString(), tickers: tickers.length, errors, pushes };
 }
@@ -89,7 +112,8 @@ async function handleApi(req, env, url) {
   if (m === 'GET' && p === '/api/state') {
     const [cfg, snap] = await Promise.all([getCfg(env), env.STATE.get('snapshot', 'json')]);
     const mk = marketStatus();
-    return json({ cfg, snapshot: snap || { items: {}, errors: {} }, market: mk, now: new Date().toISOString(),
+    const pushlog = (await env.STATE.get('pushlog', 'json')) || [];
+    return json({ cfg, snapshot: snap || { items: {}, errors: {} }, market: mk, now: new Date().toISOString(), pushlog,
       push: { ntfy: !!env.NTFY_TOPIC, telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) } });
   }
   if (m !== 'POST' && m !== 'DELETE') return json({ error: 'no encontrado' }, 404);
@@ -99,7 +123,11 @@ async function handleApi(req, env, url) {
   const body = m === 'POST' ? await req.json().catch(() => ({})) : {};
   const cfg = await getCfg(env);
   if (m === 'POST' && p === '/api/refresh') return json(await run(env, 'manual'));
-  if (m === 'POST' && p === '/api/test-push') return json(await sendPush(env, { title: '✅ Prueba del coach', body: 'Si ves esto, los pushes funcionan.', priority: 3, tags: ['white_check_mark'], click: env.DASH_URL }));
+  if (m === 'POST' && p === '/api/test-push') {
+    const r = await sendPush(env, { title: '✅ Prueba del coach', body: 'Si ves esto, los pushes funcionan.', priority: 3, tags: ['white_check_mark'], click: env.DASH_URL });
+    await logPush(env, [{ title: 'Prueba manual', ...r }]);
+    return json(r);
+  }
   if (m === 'POST' && p === '/api/config') {
     const wl = [...new Set((body.watchlist || cfg.watchlist).map((s) => String(s).trim().toUpperCase().replace(/\.US$/, '')))];
     if (wl.some((s) => !SYM.test(s))) return json({ error: 'ticker inválido' }, 400);

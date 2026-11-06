@@ -23,6 +23,7 @@ import random
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 UA = "Mozilla/5.0 (compatible; trader-coach/1.0)"
@@ -32,9 +33,18 @@ INTERVALS = ("1m", "5m", "15m", "30m", "60m", "1d", "1wk", "1mo")
 
 # ---------------------------------------------------------------- datos
 
+# Indices de XTB (CFD) -> simbolo de Yahoo. Mantener igual que worker/src/yahoo.js.
+INDEX_ALIASES = {"US100": "^NDX", "US500": "^GSPC", "US30": "^DJI", "DE40": "^GDAXI", "GOLD": "GC=F"}
+
+
+def yahoo_symbol(sym):
+    s = sym.upper()
+    return INDEX_ALIASES.get(s) or s.replace(".", "-")
+
+
 def yahoo_url(sym, rng, interval):
     return ("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=%s"
-            % (sym.upper().replace(".", "-"), rng, interval))
+            % (urllib.parse.quote(yahoo_symbol(sym)), rng, interval))
 
 
 def fetch(url, timeout=20):
@@ -471,7 +481,7 @@ BOGOTA = datetime.timezone(datetime.timedelta(hours=-5))  # Colombia no usa hora
 
 def xtb_symbol(sym):
     """Acciones reales de EEUU en XTB llevan sufijo .US (AAPL.US). ETFs/CFD pueden variar: verifica en xStation."""
-    return sym if "." in sym else sym + ".US"
+    return sym if "." in sym or sym.upper() in INDEX_ALIASES else sym + ".US"
 
 
 def market_hours_bogota(now=None):

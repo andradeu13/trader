@@ -78,6 +78,7 @@ SESGO ALCISTA, ESPERAR, SESGO BAJISTA, ZONA DE VENTA / REDUCIR.
 
 - El usuario opera en **XTB** (xStation). No hay conector de broker para XTB: las ordenes las pone el a mano. `trader-broker` (Alpaca/IBKR) no aplica; el coach entrega el plan (entrada, stop, take-profit, acciones) y el usuario lo escribe en xStation.
 - Simbolos de acciones de EEUU en XTB: `AAPL.US`. El analisis lo muestra. Verifica ETFs y CFD en xStation.
+- Indices de XTB (CFD): `US100` (Nasdaq 100, Yahoo `^NDX`), `US500`, `US30`, `DE40`, `GOLD`. `coach.py analyze US100` funciona. En CFD el apalancamiento multiplica tambien las perdidas: el riesgo real lo marca el stop.
 - Precio de referencia: Yahoo tiene retraso y no incluye el spread de XTB. Recuerda revisar spread, comision y swap (si es CFD) antes de abrir; un stop muy corto puede perder por spread.
 - Horas siempre en Bogota. NYSE 9:30-16:00 Nueva York = 09:30-16:00 Bogota en horario de invierno de EEUU (hasta el 7-mar-2027) y 08:30-15:00 en verano.
 - Si el usuario tiene cuenta en otra divisa o apalancamiento (CFD), el riesgo se mide igual: perdida maxima en dinero = acciones x (entrada - stop). No sugerir apalancamiento.
